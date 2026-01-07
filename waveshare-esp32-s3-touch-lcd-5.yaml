@@ -1,0 +1,142 @@
+esphome:
+  name: waveshare-esp32-s3-lcd
+  friendly_name: Waveshare ESP32-S3 LCD 5
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+    version: recommended
+    sdkconfig_options:
+      CONFIG_ESP32S3_DEFAULT_CPU_FREQ_240: y
+      CONFIG_ESP32S3_DATA_CACHE_64KB: y
+      CONFIG_SPIRAM_MODE_QUAD: n
+      CONFIG_SPIRAM_MODE_OCT: y
+      CONFIG_SPIRAM_SPEED_80M: y
+      CONFIG_SPIRAM_BOOT_INIT: y
+      CONFIG_SPIRAM_USE_MALLOC: y
+
+# Enable PSRAM
+psram:
+  mode: octal
+  speed: 80MHz
+
+# Web server for easy access
+web_server:
+  port: 80
+
+# Wi-Fi and API
+wifi:
+  # ssid: "YOUR_SSID"
+  # password: "YOUR_PASSWORD"
+  ap:
+    ssid: "Waveshare LCD Fallback"
+
+api:
+ota:
+  - platform: esphome
+logger:
+
+i2c:
+  sda: GPIO08
+  scl: GPIO09
+  scan: True
+  id: i2_bus_a
+# CH422G I/O Expander
+ch422g:
+  - id: ch422g_hub
+
+switch:
+  - platform: gpio
+    name: backlight_pin
+    restore_mode: ALWAYS_ON
+    pin:
+      ch422g: ch422g_hub
+      number: 2
+      mode:
+        output: true
+      inverted: false
+
+# GT911 Touch Controller
+touchscreen:
+  - platform: gt911
+    address: 0x5D
+    id: my_touchscreen
+    update_interval: 16ms
+    interrupt_pin: 4
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 1
+
+# RGB Display Configuration
+display:
+  - platform: rpi_dpi_rgb
+    id: my_display
+    dimensions:
+      width: 800
+      height: 480
+    data_pins:
+      # Blue: B3-B7
+      - GPIO14
+      - GPIO38
+      - GPIO18
+      - GPIO17
+      - GPIO10
+      # Green: G2-G7
+      - GPIO39
+      - GPIO0
+      - GPIO45
+      - GPIO48
+      - GPIO47
+      - GPIO21
+      # Red: R3-R7
+      - GPIO1
+      - GPIO2
+      - GPIO42
+      - GPIO41
+      - GPIO40
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 3
+    pclk_pin: 7
+    pclk_inverted: false
+    hsync_pin:
+      number: 46
+      ignore_strapping_warning: true
+    vsync_pin:
+      number: 3
+      ignore_strapping_warning: true
+    de_pin: GPIO5
+    color_order: RGB
+    pclk_frequency: 16MHz
+    hsync_pulse_width: 48
+    hsync_back_porch: 40
+    hsync_front_porch: 40
+    vsync_pulse_width: 3
+    vsync_back_porch: 29
+    vsync_front_porch: 13
+
+
+# LVGL Configuration
+font:
+  - file: "gfonts://Roboto"
+    id: font_roboto
+    size: 40
+
+lvgl:
+  id: my_lvgl
+  displays:
+    - my_display
+  touchscreens:
+    - my_touchscreen
+  bg_color: 0x000000
+  disp_bg_color: 0x000000
+  buffer_size: 20%
+  pages:
+    - id: main_page
+      widgets:
+        - label:
+            text: "Hello Waveshare!"
+            align: CENTER
+            text_font: font_roboto
+            text_color: 0xFFFFFF
