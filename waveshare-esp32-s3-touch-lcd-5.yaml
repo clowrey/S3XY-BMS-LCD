@@ -64,6 +64,7 @@ sensor:
     hmi_bms_id: bms_hub
     soc:
       name: "BMS SOC"
+      accuracy_decimals: 2
     current:
       name: "BMS Current"
     battery_voltage:
@@ -84,10 +85,10 @@ uart:
   - id: uart_bus
     tx_pin:
       number: GPIO19
-      inverted: true
+      inverted: false
     rx_pin:
       number: GPIO20
-      inverted: true
+      inverted: false
       mode:
         input: true
         pullup: false
@@ -95,6 +96,7 @@ uart:
     data_bits: 8
     parity: NONE
     stop_bits: 1
+    rx_buffer_size: 1024
     # stop_bits: 2  <-- Try this if data is still garbled
 
 i2c:
