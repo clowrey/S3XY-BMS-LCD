@@ -110,14 +110,6 @@ void HMIBMS::loop() {
              this->handle_packet_(this->rx_buffer_.data() + 2, payload_len);
              this->rx_buffer_.clear();
           } else {
-             // One last check: maybe it's the CCITT-FALSE one on [Len-1, Payload]
-             uint16_t ccitt_crc = this->crc16_ccitt_(this->rx_buffer_.data() + 1, payload_len + 1);
-             if (ccitt_crc == ((this->rx_buffer_[payload_len + 3] << 8) | this->rx_buffer_[payload_len + 2])) {
-                this->handle_packet_(this->rx_buffer_.data() + 2, payload_len);
-                this->rx_buffer_.clear();
-                return;
-             }
-
              ESP_LOGW(TAG, "CRC mismatch: Type=0x%02X LenField=0x%02X Calc=0x%04X Msg=0x%04X", 
                       this->rx_buffer_[2], payload_len_minus_1, computed_crc, received_crc);
              ESP_LOGD(TAG, "Raw packet: %s", format_hex_pretty(this->rx_buffer_).c_str());
@@ -255,22 +247,6 @@ void HMIBMS::handle_read_registers_response_(const uint8_t *data, size_t length)
     
     offset += val_size;
   }
-}
-
-uint16_t HMIBMS::crc16_ccitt_(const uint8_t *data, size_t len) {
-  // Common CRC16-CCITT (0x1021), init 0xFFFF
-  uint16_t crc = 0xFFFF;
-  for (size_t i = 0; i < len; i++) {
-    crc ^= (uint16_t)data[i] << 8;
-    for (uint8_t j = 0; j < 8; j++) {
-      if (crc & 0x8000) {
-        crc = (crc << 1) ^ 0x1021;
-      } else {
-        crc <<= 1;
-      }
-    }
-  }
-  return crc;
 }
 
 uint16_t HMIBMS::crc16_modbus_(const uint8_t *data, size_t len) {

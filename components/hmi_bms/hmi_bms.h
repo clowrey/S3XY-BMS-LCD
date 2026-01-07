@@ -71,7 +71,6 @@ class HMIBMS : public PollingComponent, public uart::UARTDevice {
   
   void send_packet_(const std::vector<uint8_t> &payload);
   
-  uint16_t crc16_ccitt_(const uint8_t *data, size_t len);
   uint16_t crc16_modbus_(const uint8_t *data, size_t len);
 
   uint8_t address_{0x00};
