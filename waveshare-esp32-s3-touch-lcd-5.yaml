@@ -198,7 +198,7 @@ lvgl:
     - id: main_page
       widgets:
         - label:
-            text: "Hello Waveshare!"
+            text: "Hello S3XY!"
             align: CENTER
             text_font: font_roboto
             text_color: 0xFFFFFF
