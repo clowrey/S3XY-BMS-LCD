@@ -24,25 +24,85 @@ psram:
 # Web server for easy access
 web_server:
   port: 80
+  auth:
+    username: !secret web_server_username
+    password: !secret web_server_password
+
+captive_portal:
 
 # Wi-Fi and API
 wifi:
-  # ssid: "YOUR_SSID"
-  # password: "YOUR_PASSWORD"
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
   ap:
-    ssid: "Waveshare LCD Fallback"
+    ssid: "S3XY LCD Fallback"
+    password: "12345678"
 
 api:
+  encryption:
+    key: !secret api_encryption_key
 ota:
   - platform: esphome
+    password: !secret ota_password
+  - platform: web_server
+
+external_components:
+  - source:
+      type: local
+      path: components
+
+hmi_bms:
+  id: bms_hub
+  uart_id: uart_bus
+  update_interval: 10s
+  bypass_crc: true
+  baud_rate: 460800
+  dump_raw: true
+
+sensor:
+  - platform: hmi_bms
+    hmi_bms_id: bms_hub
+    soc:
+      name: "BMS SOC"
+    current:
+      name: "BMS Current"
+    battery_voltage:
+      name: "BMS Battery Voltage"
+    temperature_min:
+      name: "BMS Temperature Min"
+    temperature_max:
+      name: "BMS Temperature Max"
+    cell_voltage_min:
+      name: "BMS Cell Voltage Min"
+    cell_voltage_max:
+      name: "BMS Cell Voltage Max"
+
 logger:
+  baud_rate: 0
+
+uart:
+  - id: uart_bus
+    tx_pin:
+      number: GPIO19
+      inverted: true
+    rx_pin:
+      number: GPIO20
+      inverted: true
+      mode:
+        input: true
+        pullup: false
+    baud_rate: 460800
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    # stop_bits: 2  <-- Try this if data is still garbled
 
 i2c:
   sda: GPIO08
   scl: GPIO09
   scan: True
   id: i2_bus_a
-# CH422G I/O Expander
+
 ch422g:
   - id: ch422g_hub
 
@@ -57,7 +117,7 @@ switch:
         output: true
       inverted: false
 
-# GT911 Touch Controller
+
 touchscreen:
   - platform: gt911
     address: 0x5D
