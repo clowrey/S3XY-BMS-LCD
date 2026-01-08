@@ -24,6 +24,7 @@ CONF_TEMPERATURE_MIN = "temperature_min"
 CONF_TEMPERATURE_MAX = "temperature_max"
 CONF_CELL_VOLTAGE_MIN = "cell_voltage_min"
 CONF_CELL_VOLTAGE_MAX = "cell_voltage_max"
+CONF_CELL_VOLTAGES = "cell_voltages"
 
 CONFIG_SCHEMA = cv.Schema({
     cv.GenerateID(CONF_HMI_BMS_ID): cv.use_id(HMIBMS),
@@ -69,6 +70,12 @@ CONFIG_SCHEMA = cv.Schema({
         device_class=DEVICE_CLASS_VOLTAGE,
         state_class=STATE_CLASS_MEASUREMENT,
     ),
+    cv.Optional(CONF_CELL_VOLTAGES): cv.ensure_list(sensor.sensor_schema(
+        unit_of_measurement=UNIT_VOLT,
+        accuracy_decimals=3,
+        device_class=DEVICE_CLASS_VOLTAGE,
+        state_class=STATE_CLASS_MEASUREMENT,
+    )),
 })
 
 async def to_code(config):
@@ -95,3 +102,8 @@ async def to_code(config):
     if CONF_CELL_VOLTAGE_MAX in config:
         sens = await sensor.new_sensor(config[CONF_CELL_VOLTAGE_MAX])
         cg.add(parent.set_cell_voltage_max_sensor(sens))
+    
+    if CONF_CELL_VOLTAGES in config:
+        for conf in config[CONF_CELL_VOLTAGES]:
+            sens = await sensor.new_sensor(conf)
+            cg.add(parent.add_cell_voltage_sensor(sens))

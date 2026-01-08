@@ -13,6 +13,8 @@ enum HMIMsgType {
   HMI_MSG_WRITE_REGISTERS = 0x03,
   HMI_MSG_READ_REGISTERS = 0x04,
   HMI_MSG_READ_REGISTERS_RESPONSE = 0x84,
+  HMI_MSG_READ_CELL_VOLTAGES = 0x05,
+  HMI_MSG_READ_CELL_VOLTAGES_RESPONSE = 0x85,
 };
 
 enum HMIType {
@@ -60,6 +62,8 @@ class HMIBMS : public PollingComponent, public uart::UARTDevice {
   void set_temperature_max_sensor(sensor::Sensor *s) { temperature_max_sensor_ = s; }
   void set_cell_voltage_min_sensor(sensor::Sensor *s) { cell_voltage_min_sensor_ = s; }
   void set_cell_voltage_max_sensor(sensor::Sensor *s) { cell_voltage_max_sensor_ = s; }
+  void add_cell_voltage_sensor(sensor::Sensor *s) { cell_voltage_sensors_.push_back(s); }
+  const std::vector<sensor::Sensor *> &get_cell_voltage_sensors() const { return cell_voltage_sensors_; }
   void set_bypass_crc(bool bypass) { bypass_crc_ = bypass; }
   void set_baud_rate(uint32_t baud) { baud_rate_ = baud; }
   void set_dump_raw(bool dump) { dump_raw_ = dump; }
@@ -68,6 +72,7 @@ class HMIBMS : public PollingComponent, public uart::UARTDevice {
   void handle_packet_(const uint8_t *payload, size_t length);
   void handle_message_(const uint8_t *msg, size_t length);
   void handle_read_registers_response_(const uint8_t *data, size_t length);
+  void handle_read_cell_voltages_response_(const uint8_t *data, size_t length);
   
   void send_packet_(const std::vector<uint8_t> &payload);
   
@@ -84,9 +89,16 @@ class HMIBMS : public PollingComponent, public uart::UARTDevice {
   sensor::Sensor *temperature_max_sensor_{nullptr};
   sensor::Sensor *cell_voltage_min_sensor_{nullptr};
   sensor::Sensor *cell_voltage_max_sensor_{nullptr};
+  std::vector<sensor::Sensor *> cell_voltage_sensors_;
   bool bypass_crc_{false};
   uint32_t baud_rate_{460800};
   bool dump_raw_{false};
+
+  struct SensorUpdate {
+    sensor::Sensor *sensor;
+    float state;
+  };
+  std::vector<SensorUpdate> publish_queue_;
 };
 
 }  // namespace hmi_bms

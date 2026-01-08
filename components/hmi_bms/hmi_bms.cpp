@@ -16,6 +16,8 @@ void HMIBMS::update() {
     return;
   }
 
+  bool use_cv_cmd = !this->cell_voltage_sensors_.empty();
+
   std::vector<uint8_t> payload;
   payload.push_back(HMI_MSG_READ_REGISTERS);
   payload.push_back(this->address_);
@@ -35,6 +37,13 @@ void HMIBMS::update() {
 
   if (payload.size() > 2) {
     this->send_packet_(payload);
+  }
+
+  if (use_cv_cmd) {
+    std::vector<uint8_t> cv_payload;
+    cv_payload.push_back(HMI_MSG_READ_CELL_VOLTAGES);
+    cv_payload.push_back(this->address_);
+    this->send_packet_(cv_payload);
   }
 }
 
@@ -59,10 +68,23 @@ void HMIBMS::send_packet_(const std::vector<uint8_t> &payload) {
 }
 
 void HMIBMS::loop() {
+  // 1. Process a small number of sensor updates from the queue to avoid blocking
+  if (!this->publish_queue_.empty()) {
+    auto update = this->publish_queue_.front();
+    this->publish_queue_.erase(this->publish_queue_.begin());
+    if (update.sensor != nullptr) {
+      update.sensor->publish_state(update.state);
+    }
+  }
+
   static std::vector<uint8_t> dump_buffer;
-  while (this->available()) {
+  uint32_t bytes_read = 0;
+  
+  // 2. Limit number of bytes read per loop to avoid UART saturation
+  while (this->available() && bytes_read < 128) {
     uint8_t byte;
     this->read_byte(&byte);
+    bytes_read++;
 
     if (this->dump_raw_) {
       dump_buffer.push_back(byte);
@@ -103,6 +125,8 @@ void HMIBMS::loop() {
           }
           this->handle_packet_(this->rx_buffer_.data() + 2, payload_len);
           this->rx_buffer_.clear();
+          // Stop processing more bytes this loop to give the system air
+          return;
         } else {
           // Try Big Endian CRC or alternate check
           received_crc = (this->rx_buffer_[payload_len + 2] << 8) | this->rx_buffer_[payload_len + 3];
@@ -142,6 +166,9 @@ void HMIBMS::handle_packet_(const uint8_t *payload, size_t length) {
         // This message type has variable length based on the registers included
         this->handle_read_registers_response_(payload + offset, length - offset);
         return; // Assume variable length takes rest of packet for now
+      case HMI_MSG_READ_CELL_VOLTAGES_RESPONSE:
+        this->handle_read_cell_voltages_response_(payload + offset, length - offset);
+        return;
       case HMI_MSG_ANNOUNCE_DEVICE:
         if (offset + 11 <= length) {
           uint8_t device_type = payload[offset + 1];
@@ -224,29 +251,77 @@ void HMIBMS::handle_read_registers_response_(const uint8_t *data, size_t length)
     // Parse values as Little Endian
     if (reg_id == HMI_REG_SOC && this->soc_sensor_ != nullptr) {
       uint32_t val = (uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24);
-      this->soc_sensor_->publish_state(val / 100.0f); 
+      this->publish_queue_.push_back({this->soc_sensor_, val / 100.0f});
     } else if (reg_id == HMI_REG_CURRENT && this->current_sensor_ != nullptr) {
       int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
-      this->current_sensor_->publish_state(val / 1000.0f); // mA to A
+      this->publish_queue_.push_back({this->current_sensor_, val / 1000.0f}); // mA to A
     } else if (reg_id == HMI_REG_BATTERY_VOLTAGE && this->battery_voltage_sensor_ != nullptr) {
       int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
-      this->battery_voltage_sensor_->publish_state(val / 1000.0f); // mV to V
+      this->publish_queue_.push_back({this->battery_voltage_sensor_, val / 1000.0f}); // mV to V
     } else if (reg_id == HMI_REG_TEMPERATURE_MIN && this->temperature_min_sensor_ != nullptr) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->temperature_min_sensor_->publish_state(val / 10.0f); // 0.1C to C
+      this->publish_queue_.push_back({this->temperature_min_sensor_, val / 10.0f}); // 0.1C to C
     } else if (reg_id == HMI_REG_TEMPERATURE_MAX && this->temperature_max_sensor_ != nullptr) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->temperature_max_sensor_->publish_state(val / 10.0f); // 0.1C to C
+      this->publish_queue_.push_back({this->temperature_max_sensor_, val / 10.0f}); // 0.1C to C
     } else if (reg_id == HMI_REG_CELL_VOLTAGE_MIN && this->cell_voltage_min_sensor_ != nullptr) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->cell_voltage_min_sensor_->publish_state(val / 1000.0f); // mV to V
+      this->publish_queue_.push_back({this->cell_voltage_min_sensor_, val / 1000.0f}); // mV to V
     } else if (reg_id == HMI_REG_CELL_VOLTAGE_MAX && this->cell_voltage_max_sensor_ != nullptr) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->cell_voltage_max_sensor_->publish_state(val / 1000.0f); // mV to V
+      this->publish_queue_.push_back({this->cell_voltage_max_sensor_, val / 1000.0f}); // mV to V
     }
     
     offset += val_size;
   }
+}
+
+void HMIBMS::handle_read_cell_voltages_response_(const uint8_t *data, size_t length) {
+  if (length < 3) return;
+  uint8_t address = data[1];
+  uint8_t num_cells = data[2];
+  
+  size_t offset = 3;
+  int16_t last_cell_voltage = 0;
+  uint16_t cells_found = 0;
+  
+  for (int i = 0; i < num_cells && offset < length; i++) {
+    int16_t cell_voltage;
+    if (data[offset] & 0x80) {
+      // Absolute voltage (2 bytes, big-endian)
+      if (offset + 1 >= length) break;
+      uint16_t val = (((uint16_t)data[offset] & 0x7F) << 8) | data[offset + 1];
+      // Sign extend 15-bit to 16-bit
+      if (val & 0x4000) {
+        cell_voltage = (int16_t)(val | 0x8000);
+      } else {
+        cell_voltage = (int16_t)val;
+      }
+      offset += 2;
+    } else {
+      // Delta voltage (1 byte, signed 7-bit)
+      uint8_t val = data[offset] & 0x7F;
+      int8_t delta;
+      if (val & 0x40) {
+        delta = (int8_t)(val | 0x80);
+      } else {
+        delta = (int8_t)val;
+      }
+      cell_voltage = last_cell_voltage + delta;
+      offset += 1;
+    }
+    
+    if (i < this->cell_voltage_sensors_.size() && this->cell_voltage_sensors_[i] != nullptr) {
+      if (cell_voltage == -1) {
+        this->publish_queue_.push_back({this->cell_voltage_sensors_[i], NAN});
+      } else {
+        this->publish_queue_.push_back({this->cell_voltage_sensors_[i], cell_voltage / 1000.0f});
+        cells_found++;
+      }
+    }
+    last_cell_voltage = cell_voltage;
+  }
+  ESP_LOGD(TAG, "Read %u cell voltages from 0x%02X (queued)", cells_found, address);
 }
 
 uint16_t HMIBMS::crc16_modbus_(const uint8_t *data, size_t len) {
