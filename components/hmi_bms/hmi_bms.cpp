@@ -7,6 +7,64 @@ namespace hmi_bms {
 
 static const char *const TAG = "hmi_bms";
 
+static const char* EVENT_LEVELS[] = {
+    "NONE",
+    "INFO",
+    "WARNING",
+    "CRITICAL",
+    "FATAL"
+};
+
+static const char* EVENT_TYPES[] = {
+    "POS STUCK OPEN",
+    "POS STUCK CLOSED",
+    "NEG STUCK OPEN",
+    "NEG STUCK CLOSED",
+    "PRE STUCK OPEN",
+    "PRE STUCK CLOSED",
+    "TEST FAIL POS",
+    "TEST FAIL NEG",
+    "TEST FAIL PRE",
+    "PRECHARGE FAIL",
+    "CURRENT STALE",
+    "SUPPLY STALE",
+    "BMB STALE",
+    "TEMP STALE",
+    "SOC STALE",
+    "BMB MISSING",
+    "BMB FAULT",
+    "BMB VOLTAGE MISMATCH",
+    "BMB TEMP MISMATCH",
+    "BMB SPI ERROR",
+    "BMB UART ERROR",
+    "BMB CAN ERROR",
+    "CELL VOLTAGE LOW",
+    "CELL VOLTAGE HIGH",
+    "CELL VOLTAGE CRITICAL LOW",
+    "CELL VOLTAGE CRITICAL HIGH",
+    "CELL VOLTAGE DELTA",
+    "PACK VOLTAGE LOW",
+    "PACK VOLTAGE HIGH",
+    "PACK VOLTAGE CRITICAL LOW",
+    "PACK VOLTAGE CRITICAL HIGH",
+    "CURRENT HIGH CHARGE",
+    "CURRENT HIGH DISCHARGE",
+    "CURRENT CRITICAL HIGH CHARGE",
+    "CURRENT CRITICAL HIGH DISCHARGE",
+    "TEMP LOW CHARGE",
+    "TEMP LOW DISCHARGE",
+    "TEMP HIGH CHARGE",
+    "TEMP HIGH DISCHARGE",
+    "TEMP CRITICAL LOW",
+    "TEMP CRITICAL HIGH",
+    "ESTOP PRESSED",
+    "BOOT NORMAL",
+    "BOOT WATCHDOG",
+    "BOOT BROWNOUT",
+    "BOOT SOFTWARE",
+    "BOOT OTHER"
+};
+
 void HMIBMS::setup() {
 }
 
@@ -16,7 +74,10 @@ void HMIBMS::update() {
     return;
   }
 
-  bool use_cv_cmd = !this->cell_voltage_sensors_.empty();
+  this->update_count_++;
+  bool slow_poll = (this->update_count_ % 10 == 0);
+
+  bool use_cv_cmd = !this->cell_voltage_sensors_.empty() && slow_poll;
 
   std::vector<uint8_t> payload;
   payload.push_back(HMI_MSG_READ_REGISTERS);
@@ -27,13 +88,52 @@ void HMIBMS::update() {
     payload.push_back(reg >> 8);   // Hi byte
   };
 
-  if (this->soc_sensor_) add_reg(HMI_REG_SOC);
-  if (this->current_sensor_) add_reg(HMI_REG_CURRENT);
-  if (this->battery_voltage_sensor_) add_reg(HMI_REG_BATTERY_VOLTAGE);
-  if (this->temperature_min_sensor_) add_reg(HMI_REG_TEMPERATURE_MIN);
-  if (this->temperature_max_sensor_) add_reg(HMI_REG_TEMPERATURE_MAX);
-  if (this->cell_voltage_min_sensor_) add_reg(HMI_REG_CELL_VOLTAGE_MIN);
-  if (this->cell_voltage_max_sensor_) add_reg(HMI_REG_CELL_VOLTAGE_MAX);
+  // 1Hz Slow Poll Registers
+  if (slow_poll) {
+    if (this->millis_sensor_) add_reg(HMI_REG_MILLIS);
+    if (this->serial_sensor_) add_reg(HMI_REG_SERIAL);
+    if (this->system_request_sensor_) add_reg(HMI_REG_SYSTEM_REQUEST);
+    if (this->soc_sensor_) add_reg(HMI_REG_SOC);
+    if (this->charge_raw_sensor_) add_reg(HMI_REG_CHARGE);
+    if (this->temperature_min_dC_sensor_) add_reg(HMI_REG_TEMPERATURE_MIN);
+    if (this->temperature_max_dC_sensor_) add_reg(HMI_REG_TEMPERATURE_MAX);
+    if (this->cell_voltage_min_mV_sensor_) add_reg(HMI_REG_CELL_VOLTAGE_MIN);
+    if (this->cell_voltage_max_mV_sensor_) add_reg(HMI_REG_CELL_VOLTAGE_MAX);
+    if (this->system_sm_sensor_) add_reg(HMI_REG_SYSTEM_STATE);
+    if (this->soc_voltage_based_sensor_) add_reg(HMI_REG_SOC_VOLTAGE_BASED);
+    if (this->soc_basic_count_sensor_) add_reg(HMI_REG_SOC_BASIC_COUNT);
+    if (this->soc_ekf_sensor_) add_reg(HMI_REG_SOC_EKF);
+    if (this->capacity_mC_sensor_) add_reg(HMI_REG_CAPACITY);
+    if (this->supply_voltage_3V3_mV_sensor_) add_reg(HMI_REG_SUPPLY_VOLTAGE_3V3);
+    if (this->supply_voltage_5V_mV_sensor_) add_reg(HMI_REG_SUPPLY_VOLTAGE_5V);
+    if (this->supply_voltage_12V_mV_sensor_) add_reg(HMI_REG_SUPPLY_VOLTAGE_12V);
+    if (this->supply_voltage_contactor_mV_sensor_) add_reg(HMI_REG_SUPPLY_VOLTAGE_CTR);
+    if (this->pos_contactor_voltage_mV_sensor_) add_reg(HMI_REG_POS_CONTACTOR_VOLTAGE);
+    if (this->neg_contactor_voltage_mV_sensor_) add_reg(HMI_REG_NEG_CONTACTOR_VOLTAGE);
+    
+    // Module Temperatures (0x200 - 0x207) - always poll these (8 * 7 bytes = 56 bytes)
+    for (uint16_t i = 0; i < this->module_temperature_sensors_.size() && i < 8; i++) {
+      add_reg(HMI_REG_MODULE_TEMPS_START + i);
+    }
+
+    // Raw Temperatures (0x208 - 0x238) - Poll in chunks of 8 to stay under 256-byte limit
+    // 8 registers * 7 bytes/reg = 56 bytes per batch.
+    uint16_t num_raw = this->raw_temperature_sensors_.size();
+    if (num_raw > 0) {
+      if (num_raw > 48) num_raw = 48;
+      for (uint16_t i = 0; i < 8; i++) {
+        uint16_t idx = (this->temp_poll_index_ + i) % num_raw;
+        add_reg(HMI_REG_RAW_TEMPS_START + idx);
+      }
+      this->temp_poll_index_ = (this->temp_poll_index_ + 8) % num_raw;
+    }
+  }
+
+  // 10Hz Fast Poll Registers (V, A, Contactor State)
+  if (this->current_mA_sensor_) add_reg(HMI_REG_CURRENT);
+  if (this->battery_voltage_mV_sensor_) add_reg(HMI_REG_BATTERY_VOLTAGE);
+  if (this->output_voltage_mV_sensor_) add_reg(HMI_REG_OUTPUT_VOLTAGE);
+  if (this->contactor_sm_sensor_) add_reg(HMI_REG_CONTACTORS_STATE);
 
   if (payload.size() > 2) {
     this->send_packet_(payload);
@@ -44,6 +144,15 @@ void HMIBMS::update() {
     cv_payload.push_back(HMI_MSG_READ_CELL_VOLTAGES);
     cv_payload.push_back(this->address_);
     this->send_packet_(cv_payload);
+  }
+
+  if (slow_poll) {
+    std::vector<uint8_t> event_payload;
+    event_payload.push_back(HMI_MSG_READ_EVENTS);
+    event_payload.push_back(this->address_);
+    event_payload.push_back(0x00); // Start index Lo
+    event_payload.push_back(0x00); // Start index Hi
+    this->send_packet_(event_payload);
   }
 }
 
@@ -67,9 +176,29 @@ void HMIBMS::send_packet_(const std::vector<uint8_t> &payload) {
   this->write_array(frame);
 }
 
+void HMIBMS::send_system_request(uint8_t request) {
+  if (this->address_ == 0) {
+    ESP_LOGW(TAG, "Cannot send system request: No device address assigned");
+    return;
+  }
+  ESP_LOGI(TAG, "Sending system request: %u", request);
+  std::vector<uint8_t> payload;
+  payload.push_back(HMI_MSG_WRITE_REGISTERS);
+  payload.push_back(this->address_);
+  payload.push_back(HMI_REG_SYSTEM_REQUEST & 0xFF); // Reg Lo
+  payload.push_back(HMI_REG_SYSTEM_REQUEST >> 8);   // Reg Hi
+  payload.push_back(HMI_TYPE_UINT8);
+  payload.push_back(request);
+  this->send_packet_(payload);
+  
+  if (this->system_request_sensor_) {
+    this->publish_queue_.push_back({this->system_request_sensor_, (float)request});
+  }
+}
+
 void HMIBMS::loop() {
-  // 1. Process a small number of sensor updates from the queue to avoid blocking
-  if (!this->publish_queue_.empty()) {
+  // 1. Process all sensor updates from the queue
+  while (!this->publish_queue_.empty()) {
     auto update = this->publish_queue_.front();
     this->publish_queue_.erase(this->publish_queue_.begin());
     if (update.sensor != nullptr) {
@@ -169,6 +298,9 @@ void HMIBMS::handle_packet_(const uint8_t *payload, size_t length) {
       case HMI_MSG_READ_CELL_VOLTAGES_RESPONSE:
         this->handle_read_cell_voltages_response_(payload + offset, length - offset);
         return;
+      case HMI_MSG_READ_EVENTS_RESPONSE:
+        this->handle_read_events_response_(payload + offset, length - offset);
+        return;
       case HMI_MSG_ANNOUNCE_DEVICE:
         if (offset + 11 <= length) {
           uint8_t device_type = payload[offset + 1];
@@ -232,47 +364,130 @@ void HMIBMS::handle_read_registers_response_(const uint8_t *data, size_t length)
   ESP_LOGD(TAG, "Read registers response from 0x%02X, len=%zu", address, length);
   size_t offset = 2;
   
+  float t_min = NAN;
+  float t_max = NAN;
+  float v_min = NAN;
+  float v_max = NAN;
+
   while (offset + 3 <= length) {
-    // Register ID is 2 bytes, Little Endian (per BMS source)
     uint16_t reg_id = data[offset] | (data[offset + 1] << 8);
     uint8_t reg_type = data[offset + 2];
     offset += 3;
-    
-    // Low 4 bits of type indicate size in bytes (per BMS source hmi_get_type_size)
     size_t val_size = reg_type & 0x0F;
-    
-    if (val_size == 0 || offset + val_size > length) {
-      ESP_LOGW(TAG, "Invalid register size %d for type 0x%02X at reg 0x%04X", val_size, reg_type, reg_id);
-      return;
-    }
-    
+    if (val_size == 0 || offset + val_size > length) return;
     const uint8_t *v = data + offset;
     
-    // Parse values as Little Endian
-    if (reg_id == HMI_REG_SOC && this->soc_sensor_ != nullptr) {
-      uint32_t val = (uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24);
+    if (reg_id == HMI_REG_MILLIS && this->millis_sensor_ != nullptr) {
+      uint64_t val = (uint64_t)v[0] | ((uint64_t)v[1] << 8) | ((uint64_t)v[2] << 16) | ((uint64_t)v[3] << 24) |
+                     ((uint64_t)v[4] << 32) | ((uint64_t)v[5] << 40) | ((uint64_t)v[6] << 48) | ((uint64_t)v[7] << 56);
+      this->publish_queue_.push_back({this->millis_sensor_, (float)val});
+    } else if (reg_id == HMI_REG_SERIAL && this->serial_sensor_ != nullptr) {
+      uint64_t val = (uint64_t)v[0] | ((uint64_t)v[1] << 8) | ((uint64_t)v[2] << 16) | ((uint64_t)v[3] << 24) |
+                     ((uint64_t)v[4] << 32) | ((uint64_t)v[5] << 40) | ((uint64_t)v[6] << 48) | ((uint64_t)v[7] << 56);
+      this->publish_queue_.push_back({this->serial_sensor_, (float)val});
+    } else if (reg_id == HMI_REG_SOC && this->soc_sensor_ != nullptr) {
+      uint32_t val = (reg_type == HMI_TYPE_UINT16) ? (v[0] | (v[1] << 8)) : ((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
       this->publish_queue_.push_back({this->soc_sensor_, val / 100.0f});
-    } else if (reg_id == HMI_REG_CURRENT && this->current_sensor_ != nullptr) {
+    } else if (reg_id == HMI_REG_CURRENT && this->current_mA_sensor_ != nullptr) {
       int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
-      this->publish_queue_.push_back({this->current_sensor_, val / 1000.0f}); // mA to A
-    } else if (reg_id == HMI_REG_BATTERY_VOLTAGE && this->battery_voltage_sensor_ != nullptr) {
+      this->publish_queue_.push_back({this->current_mA_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_CHARGE && this->charge_raw_sensor_ != nullptr) {
+      int64_t val;
+      if (reg_type == HMI_TYPE_INT64) {
+        val = (int64_t)v[0] | ((int64_t)v[1] << 8) | ((int64_t)v[2] << 16) | ((int64_t)v[3] << 24) |
+              ((int64_t)v[4] << 32) | ((int64_t)v[5] << 40) | ((int64_t)v[6] << 48) | ((int64_t)v[7] << 56);
+      } else {
+        val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
+      }
+      this->publish_queue_.push_back({this->charge_raw_sensor_, (float)(val / 3600000.0f)}); // Convert mC to Ah
+    } else if (reg_id == HMI_REG_BATTERY_VOLTAGE && this->battery_voltage_mV_sensor_ != nullptr) {
       int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
-      this->publish_queue_.push_back({this->battery_voltage_sensor_, val / 1000.0f}); // mV to V
-    } else if (reg_id == HMI_REG_TEMPERATURE_MIN && this->temperature_min_sensor_ != nullptr) {
+      this->publish_queue_.push_back({this->battery_voltage_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_OUTPUT_VOLTAGE && this->output_voltage_mV_sensor_ != nullptr) {
+      int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
+      this->publish_queue_.push_back({this->output_voltage_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_POS_CONTACTOR_VOLTAGE && this->pos_contactor_voltage_mV_sensor_ != nullptr) {
+      int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
+      this->publish_queue_.push_back({this->pos_contactor_voltage_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_NEG_CONTACTOR_VOLTAGE && this->neg_contactor_voltage_mV_sensor_ != nullptr) {
+      int32_t val = (int32_t)((uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24));
+      this->publish_queue_.push_back({this->neg_contactor_voltage_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_TEMPERATURE_MIN) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->publish_queue_.push_back({this->temperature_min_sensor_, val / 10.0f}); // 0.1C to C
-    } else if (reg_id == HMI_REG_TEMPERATURE_MAX && this->temperature_max_sensor_ != nullptr) {
+      t_min = val / 10.0f;
+      if (this->temperature_min_dC_sensor_) this->publish_queue_.push_back({this->temperature_min_dC_sensor_, t_min});
+    } else if (reg_id == HMI_REG_TEMPERATURE_MAX) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->publish_queue_.push_back({this->temperature_max_sensor_, val / 10.0f}); // 0.1C to C
-    } else if (reg_id == HMI_REG_CELL_VOLTAGE_MIN && this->cell_voltage_min_sensor_ != nullptr) {
+      t_max = val / 10.0f;
+      if (this->temperature_max_dC_sensor_) this->publish_queue_.push_back({this->temperature_max_dC_sensor_, t_max});
+    } else if (reg_id == HMI_REG_CELL_VOLTAGE_MIN) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->publish_queue_.push_back({this->cell_voltage_min_sensor_, val / 1000.0f}); // mV to V
-    } else if (reg_id == HMI_REG_CELL_VOLTAGE_MAX && this->cell_voltage_max_sensor_ != nullptr) {
+      v_min = val / 1000.0f;
+      if (this->cell_voltage_min_mV_sensor_) this->publish_queue_.push_back({this->cell_voltage_min_mV_sensor_, v_min});
+    } else if (reg_id == HMI_REG_CELL_VOLTAGE_MAX) {
       int16_t val = (int16_t)(v[0] | (v[1] << 8));
-      this->publish_queue_.push_back({this->cell_voltage_max_sensor_, val / 1000.0f}); // mV to V
+      v_max = val / 1000.0f;
+      if (this->cell_voltage_max_mV_sensor_) this->publish_queue_.push_back({this->cell_voltage_max_mV_sensor_, v_max});
+    } else if (reg_id == HMI_REG_SYSTEM_REQUEST && this->system_request_sensor_ != nullptr) {
+      this->publish_queue_.push_back({this->system_request_sensor_, (float)v[0]});
+    } else if (reg_id == HMI_REG_SYSTEM_STATE && this->system_sm_sensor_ != nullptr) {
+      this->publish_queue_.push_back({this->system_sm_sensor_, (float)v[0]});
+    } else if (reg_id == HMI_REG_CONTACTORS_STATE && this->contactor_sm_sensor_ != nullptr) {
+      this->publish_queue_.push_back({this->contactor_sm_sensor_, (float)v[0]});
+    } else if (reg_id == HMI_REG_SOC_VOLTAGE_BASED && this->soc_voltage_based_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->soc_voltage_based_sensor_, val / 100.0f});
+    } else if (reg_id == HMI_REG_SOC_BASIC_COUNT && this->soc_basic_count_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->soc_basic_count_sensor_, val / 100.0f});
+    } else if (reg_id == HMI_REG_SOC_EKF && this->soc_ekf_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->soc_ekf_sensor_, val / 100.0f});
+    } else if (reg_id == HMI_REG_CAPACITY && this->capacity_mC_sensor_ != nullptr) {
+      uint32_t val = (uint32_t)v[0] | ((uint32_t)v[1] << 8) | ((uint32_t)v[2] << 16) | ((uint32_t)v[3] << 24);
+      this->publish_queue_.push_back({this->capacity_mC_sensor_, (float)(val / 3600000.0f)}); // Convert mC to Ah
+    } else if (reg_id == HMI_REG_SUPPLY_VOLTAGE_3V3 && this->supply_voltage_3V3_mV_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->supply_voltage_3V3_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_SUPPLY_VOLTAGE_5V && this->supply_voltage_5V_mV_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->supply_voltage_5V_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_SUPPLY_VOLTAGE_12V && this->supply_voltage_12V_mV_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->supply_voltage_12V_mV_sensor_, val / 1000.0f});
+    } else if (reg_id == HMI_REG_SUPPLY_VOLTAGE_CTR && this->supply_voltage_contactor_mV_sensor_ != nullptr) {
+      uint16_t val = v[0] | (v[1] << 8);
+      this->publish_queue_.push_back({this->supply_voltage_contactor_mV_sensor_, val / 1000.0f});
+    } else if (reg_id >= HMI_REG_MODULE_TEMPS_START && reg_id <= HMI_REG_MODULE_TEMPS_END) {
+      uint16_t idx = reg_id - HMI_REG_MODULE_TEMPS_START;
+      if (idx < this->module_temperature_sensors_.size() && this->module_temperature_sensors_[idx] != nullptr) {
+        int16_t val = (int16_t)(v[0] | (v[1] << 8));
+        this->publish_queue_.push_back({this->module_temperature_sensors_[idx], val / 10.0f});
+      }
+    } else if (reg_id >= HMI_REG_RAW_TEMPS_START && reg_id <= HMI_REG_RAW_TEMPS_END) {
+      uint16_t idx = reg_id - HMI_REG_RAW_TEMPS_START;
+      if (idx < this->raw_temperature_sensors_.size() && this->raw_temperature_sensors_[idx] != nullptr) {
+        int16_t val = (int16_t)(v[0] | (v[1] << 8));
+        this->publish_queue_.push_back({this->raw_temperature_sensors_[idx], val / 10.0f});
+      }
     }
-    
     offset += val_size;
+  }
+
+  // Calculate and publish deltas using cached values or existing state
+  if (this->temperature_delta_sensor_) {
+    float min_val = std::isnan(t_min) ? (this->temperature_min_dC_sensor_ ? this->temperature_min_dC_sensor_->state : NAN) : t_min;
+    float max_val = std::isnan(t_max) ? (this->temperature_max_dC_sensor_ ? this->temperature_max_dC_sensor_->state : NAN) : t_max;
+    if (!std::isnan(min_val) && !std::isnan(max_val)) {
+      this->publish_queue_.push_back({this->temperature_delta_sensor_, max_val - min_val});
+    }
+  }
+  if (this->cell_voltage_delta_sensor_) {
+    float min_val = std::isnan(v_min) ? (this->cell_voltage_min_mV_sensor_ ? this->cell_voltage_min_mV_sensor_->state : NAN) : v_min;
+    float max_val = std::isnan(v_max) ? (this->cell_voltage_max_mV_sensor_ ? this->cell_voltage_max_mV_sensor_->state : NAN) : v_max;
+    if (!std::isnan(min_val) && !std::isnan(max_val)) {
+      this->publish_queue_.push_back({this->cell_voltage_delta_sensor_, max_val - min_val});
+    }
   }
 }
 
@@ -322,6 +537,59 @@ void HMIBMS::handle_read_cell_voltages_response_(const uint8_t *data, size_t len
     last_cell_voltage = cell_voltage;
   }
   ESP_LOGD(TAG, "Read %u cell voltages from 0x%02X (queued)", cells_found, address);
+}
+
+void HMIBMS::handle_read_events_response_(const uint8_t *data, size_t length) {
+  if (length < 6) return;
+  uint8_t address = data[1];
+  uint16_t next_index = data[2] | (data[3] << 8);
+  uint16_t count = data[4] | (data[5] << 8);
+  
+  ESP_LOGD(TAG, "Read events response from 0x%02X, count=%u", address, count);
+  
+  size_t offset = 6;
+  uint16_t highest_level = 0;
+  uint16_t latest_event_type = 0xFFFF;
+  std::string history = "";
+  uint32_t now_millis = millis();
+
+  for (uint16_t i = 0; i < count && offset + 22 <= length; i++) {
+    uint16_t type = data[offset] | (data[offset + 1] << 8);
+    uint16_t level = data[offset + 2] | (data[offset + 3] << 8);
+    uint16_t event_count = data[offset + 4] | (data[offset + 5] << 8);
+    
+    uint64_t timestamp = 0;
+    for (int j = 0; j < 8; j++) timestamp |= (uint64_t)data[offset + 6 + j] << (j * 8);
+    
+    uint64_t event_data = 0;
+    for (int j = 0; j < 8; j++) event_data |= (uint64_t)data[offset + 14 + j] << (j * 8);
+
+    if (level > highest_level) {
+      highest_level = level;
+    }
+    latest_event_type = type;
+
+    // Build history string
+    char buf[128];
+    const char* type_str = (type < sizeof(EVENT_TYPES)/sizeof(EVENT_TYPES[0])) ? EVENT_TYPES[type] : "UNKNOWN";
+    const char* level_str = (level < sizeof(EVENT_LEVELS)/sizeof(EVENT_LEVELS[0])) ? EVENT_LEVELS[level] : "??";
+    
+    // We don't have absolute wall time, so we show relative to BMS uptime or just raw ID
+    snprintf(buf, sizeof(buf), "[%s] %u %s (x%u)\n", level_str, type, type_str, event_count);
+    history += buf;
+
+    offset += 22;
+  }
+
+  if (this->highest_event_level_sensor_) {
+    this->publish_queue_.push_back({this->highest_event_level_sensor_, (float)highest_level});
+  }
+  if (this->last_event_sensor_ && latest_event_type != 0xFFFF) {
+    this->publish_queue_.push_back({this->last_event_sensor_, (float)latest_event_type});
+  }
+  if (this->event_history_text_sensor_ && !history.empty()) {
+    this->event_history_text_sensor_->publish_state(history);
+  }
 }
 
 uint16_t HMIBMS::crc16_modbus_(const uint8_t *data, size_t len) {

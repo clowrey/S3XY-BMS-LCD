@@ -64,7 +64,7 @@ external_components:
 hmi_bms:
   id: bms_hub
   uart_id: uart_bus
-  update_interval: 10s
+  update_interval: 1s
   bypass_crc: false
   baud_rate: 460800
   dump_raw: false
@@ -74,11 +74,38 @@ sensor:
     hmi_bms_id: bms_hub
     soc:
       name: "BMS SOC"
+      id: bms_soc
       accuracy_decimals: 2
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: label_soc
+              text: !lambda 'return "SOC: " + str_sprintf("%.2f%%", x);'
     current:
       name: "BMS Current"
+      id: bms_current
+      accuracy_decimals: 3
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: label_current
+              text: !lambda 'return "Amps: " + str_sprintf("%.3fA", x);'
     battery_voltage:
       name: "BMS Battery Voltage"
+      id: bms_voltage
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: label_voltage
+              text: !lambda 'return "Pack: " + str_sprintf("%.2fV", x);'
+    output_voltage:
+      name: "BMS Output Voltage"
+      id: bms_output_voltage
+      on_value:
+        then:
+          - lvgl.label.update:
+              id: label_output_voltage
+              text: !lambda 'return "Out: " + str_sprintf("%.2fV", x);'
     temperature_min:
       name: "BMS Temperature Min"
     temperature_max:
@@ -305,6 +332,9 @@ font:
   - file: "gfonts://Roboto"
     id: font_roboto
     size: 40
+  - file: "gfonts://Roboto"
+    id: font_roboto_80
+    size: 80
 
 lvgl:
   id: my_lvgl
@@ -319,7 +349,30 @@ lvgl:
     - id: main_page
       widgets:
         - label:
-            text: "Hello S3XY!"
+            id: label_soc
+            text: "SOC: --%"
             align: CENTER
+            y: -160
             text_font: font_roboto
-            text_color: 0xFFFFFF
+            text_color: 0x00FF00
+        - label:
+            id: label_voltage
+            text: "Pack: --V"
+            align: CENTER
+            y: -60
+            text_font: font_roboto_80
+            text_color: 0x00BFFF
+        - label:
+            id: label_current
+            text: "Amps: --A"
+            align: CENTER
+            y: 40
+            text_font: font_roboto_80
+            text_color: 0xFFA500
+        - label:
+            id: label_output_voltage
+            text: "Out: --V"
+            align: CENTER
+            y: 140
+            text_font: font_roboto_80
+            text_color: 0x1E90FF

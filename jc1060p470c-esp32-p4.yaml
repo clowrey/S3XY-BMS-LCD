@@ -9,6 +9,9 @@ esphome:
     priority: -100
     then:
       - lvgl.resume: {}
+      - light.turn_on:
+          id: display_backlight
+          brightness: 30%
 
 esp32:
   board: esp32-p4-evboard
@@ -19,8 +22,6 @@ esp32:
     type: esp-idf
     sdkconfig_options:
       CONFIG_SPIRAM_XIP_FROM_PSRAM: y   # To stop the screen flashing during OTA updates
-    advanced:
-      enable_idf_experimental_features: yes
 
 esp_ldo:
   - channel: 3
@@ -55,7 +56,7 @@ web_server:
     username: !secret web_server_username
     password: !secret web_server_password
 
-captive_portal:
+#captive_portal:
 
 # Wi-Fi and API
 wifi:
@@ -63,9 +64,10 @@ wifi:
   password: !secret wifi_password
   power_save_mode: none
   reboot_timeout: 0s
-  ap:
-    ssid: "JC1060P470C Fallback"
-    password: "12345678"
+  use_address: 172.16.2.222  # ip address to use to program the esp32-p4-evboard - only used if there are issues with auto discovery
+  #ap:
+  #  ssid: "JC1060P470C Fallback"
+  #  password: "12345678"
 
 api:
   encryption:
@@ -77,24 +79,168 @@ ota:
     password: !secret ota_password
   - platform: web_server
 
+safe_mode:
+  disabled: true # Disable safe mode as too many reboots it was getting stuck in safe mode
+
 external_components:
   - source:
       type: local
       path: components
 
+# Scripts to break circular dependencies
+interval:
+  - interval: 0.1s
+    then:
+      - script.execute: update_cells_ui
+      - lvgl.label.update:
+          id: debug_reg_1
+          text:
+            format: "Reg 1 (Serial): %.0f"
+            args: [ 'id(bms_serial).state' ]
+      - lvgl.label.update:
+          id: label_debug_millis
+          text:
+            format: "Reg 2 (Millis): %.0f ms"
+            args: [ 'id(bms_millis).state' ]
+      - lvgl.label.update:
+          id: debug_reg_3
+          text:
+            format: "Reg 3 (SOC): %.2f %%"
+            args: [ 'id(bms_soc).state' ]
+      - lvgl.label.update:
+          id: debug_reg_4
+          text:
+            format: "Reg 4 (Current): %.3f A"
+            args: [ 'id(bms_current).state' ]
+      - lvgl.label.update:
+          id: debug_reg_5
+          text:
+            format: "Reg 5 (Charge): %.2f Ah"
+            args: [ 'id(bms_charge).state' ]
+      - lvgl.label.update:
+          id: debug_reg_6
+          text:
+            format: "Reg 6 (Battery V): %.3f V"
+            args: [ 'id(bms_voltage).state' ]
+      - lvgl.label.update:
+          id: debug_reg_7
+          text:
+            format: "Reg 7 (Output V): %.3f V"
+            args: [ 'id(bms_output_voltage).state' ]
+      - lvgl.label.update:
+          id: debug_reg_8
+          text:
+            format: "Reg 8 (Pos Contactor): %.3f V"
+            args: [ 'id(bms_pos_voltage).state' ]
+      - lvgl.label.update:
+          id: debug_reg_9
+          text:
+            format: "Reg 9 (Neg Contactor): %.3f V"
+            args: [ 'id(bms_neg_voltage).state' ]
+      - lvgl.label.update:
+          id: debug_reg_10
+          text:
+            format: "Reg 10 (Temp Min): %.1f °C"
+            args: [ 'id(bms_temp_min).state' ]
+      - lvgl.label.update:
+          id: debug_reg_11
+          text:
+            format: "Reg 11 (Temp Max): %.1f °C"
+            args: [ 'id(bms_temp_max).state' ]
+      - lvgl.label.update:
+          id: debug_reg_12
+          text:
+            format: "Reg 12 (Cell V Min): %.3f V"
+            args: [ 'id(bms_cell_min).state' ]
+      - lvgl.label.update:
+          id: debug_reg_13
+          text:
+            format: "Reg 13 (Cell V Max): %.3f V"
+            args: [ 'id(bms_cell_max).state' ]
+      - script.execute:
+          id: update_system_req_ui
+          val: !lambda "return id(bms_system_req).state;"
+      - script.execute:
+          id: update_system_ui
+          val: !lambda "return id(bms_system_state).state;"
+      - script.execute:
+          id: update_contactor_ui
+          val: !lambda "return id(bms_contactor_state).state;"
+      - lvgl.label.update:
+          id: debug_reg_17
+          text:
+            format: "Reg 17 (SOC Volt): %.2f %%"
+            args: [ 'id(bms_soc_voltage).state' ]
+      - lvgl.label.update:
+          id: debug_reg_18
+          text:
+            format: "Reg 18 (SOC Basic): %.2f %%"
+            args: [ 'id(bms_soc_basic).state' ]
+      - lvgl.label.update:
+          id: debug_reg_19
+          text:
+            format: "Reg 19 (SOC EKF): %.2f %%"
+            args: [ 'id(bms_soc_ekf).state' ]
+      - lvgl.label.update:
+          id: debug_reg_20
+          text:
+            format: "Reg 20 (Capacity): %.2f Ah"
+            args: [ 'id(bms_capacity).state' ]
+      - lvgl.label.update:
+          id: debug_reg_21
+          text:
+            format: "Reg 21 (3V3): %.3f V"
+            args: [ 'id(bms_supply_3v3).state' ]
+      - lvgl.label.update:
+          id: debug_reg_22
+          text:
+            format: "Reg 22 (5V): %.3f V"
+            args: [ 'id(bms_supply_5v).state' ]
+      - lvgl.label.update:
+          id: debug_reg_23
+          text:
+            format: "Reg 23 (12V): %.3f V"
+            args: [ 'id(bms_supply_12v).state' ]
+      - lvgl.label.update:
+          id: debug_reg_24
+          text:
+            format: "Reg 24 (CTR): %.3f V"
+            args: [ 'id(bms_supply_ctr).state' ]
+
+logger:
+  baud_rate: 115200
+  #hardware_uart: UART0
+  hardware_uart: USB_SERIAL_JTAG
+  level: DEBUG
+  logs:
+    sensor: INFO
+
+uart:
+  - id: uart_bus
+    tx_pin: GPIO37   #USB Negative USB(white wire) JTAG=GPIO24 UART0=GPIO37 - yes we are using the usb pins for serial UART
+    rx_pin:          #USB Positive USB(green wire) JTAG=GPIO25 UART0=GPIO38 - The other USB port on this board is USB OTG only, cannot be used for GPIO.. 
+      number: GPIO38
+      mode:
+        input: true
+        pullup: false
+    
+    
+    baud_rate: 460800
+
 hmi_bms:
   id: bms_hub
   uart_id: uart_bus
-  update_interval: 1s
+  update_interval: 0.1s
   bypass_crc: false
   baud_rate: 460800
   dump_raw: false
 
-# Scripts to break circular dependencies
-interval:
-  - interval: 1s
-    then:
-      - script.execute: update_cells_ui
+i2c:
+  - id: bus_a
+    sda: GPIO7
+    scl: GPIO8
+    scan: true
+    frequency: 400kHz
 
 script:
   - id: update_soc_ui
@@ -108,7 +254,7 @@ script:
       - lvgl.label.update:
           id: label_soc
           text:
-            format: "%.0f%%"
+            format: "%.2f%%"
             args: [ val ]
 
   - id: update_voltage_ui
@@ -119,7 +265,8 @@ script:
           id: label_voltage
           text:
             format: "%.2f V"
-            args: [ val ]
+            args: [ 'id(bms_voltage).state' ]
+      - component.update: bms_power
 
   - id: update_current_ui
     parameters:
@@ -128,24 +275,25 @@ script:
       - lvgl.label.update:
           id: label_current
           text:
-            format: "%.3f A"
+            format: "%.2f A"
             args: [ val ]
+      - component.update: bms_power
 
   - id: update_temp_ui
     then:
       - lvgl.label.update:
           id: label_temp
           text:
-            format: "%.1f° - %.1f°C"
-            args: [ 'id(bms_temp_min).state', 'id(bms_temp_max).state' ]
+            format: "%.1f°C - %.1f°C (%.1f°C)"
+            args: [ 'id(bms_temp_min).state', 'id(bms_temp_max).state', 'id(bms_temp_delta).state' ]
 
   - id: update_cells_ui
     then:
       - lvgl.label.update:
           id: label_cells
           text:
-            format: "%.3f - %.3f V"
-            args: [ 'id(bms_cell_min).state', 'id(bms_cell_max).state' ]
+            format: "%.3fV - %.3fV (%.3fV)"
+            args: [ 'id(bms_cell_min).state', 'id(bms_cell_max).state', 'id(bms_cell_delta).state' ]
       - lambda: |-
           auto* widget = id(cell_line_chart);
           auto* obj = widget->obj;
@@ -167,6 +315,235 @@ script:
           }
           lv_line_set_points(obj, line_points, 432);
 
+  - id: update_contactor_ui
+    parameters:
+      val: float
+    then:
+      - lambda: |-
+          static int last_val = -1;
+          if ((int)val != last_val) {
+            const char* state = "?? UNKNOWN";
+            switch ((int)val) {
+              case 0: state = "0 OPEN / OFF"; break;
+              case 1: state = "1 TEST PRE CLOSE"; break;
+              case 2: state = "2 TEST NEG OPEN"; break;
+              case 3: state = "3 TEST NEG CLOSE"; break;
+              case 4: state = "4 TEST POS OPEN"; break;
+              case 5: state = "5 TEST POS CLOSE"; break;
+              case 6: state = "6 PRECHARGE NEG"; break;
+              case 7: state = "7 PRECHARGING"; break;
+              case 8: state = "8 CLOSED / ON"; break;
+              case 9: state = "9 CALIBRATING"; break;
+              case 10: state = "10 CAL CL NEG"; break;
+              case 11: state = "11 CAL PRE"; break;
+              case 12: state = "12 CAL CLOSED"; break;
+              case 13: state = "13 PRE FAIL"; break;
+              case 14: state = "14 TEST FAIL"; break;
+            }
+            id(bms_contactor_state_text).publish_state(state);
+            last_val = (int)val;
+          }
+      - lvgl.label.update:
+          id: label_contactor
+          text:
+            !lambda |-
+              const char* state = "?? UNKNOWN";
+              switch ((int)val) {
+                case 0: state = "0 OPEN / OFF"; break;
+                case 1: state = "1 TEST PRE CLOSE"; break;
+                case 2: state = "2 TEST NEG OPEN"; break;
+                case 3: state = "3 TEST NEG CLOSE"; break;
+                case 4: state = "4 TEST POS OPEN"; break;
+                case 5: state = "5 TEST POS CLOSE"; break;
+                case 6: state = "6 PRECHARGE NEG"; break;
+                case 7: state = "7 PRECHARGING"; break;
+                case 8: state = "8 CLOSED / ON"; break;
+                case 9: state = "9 CALIBRATING"; break;
+                case 10: state = "10 CAL CL NEG"; break;
+                case 11: state = "11 CAL PRE"; break;
+                case 12: state = "12 CAL CLOSED"; break;
+                case 13: state = "13 PRE FAIL"; break;
+                case 14: state = "14 TEST FAIL"; break;
+              }
+              static char buf[64];
+              snprintf(buf, sizeof(buf), "Contactor: %s", state);
+              return buf;
+      - lvgl.label.update:
+          id: debug_reg_16
+          text:
+            !lambda |-
+              const char* state = "?? UNKNOWN";
+              switch ((int)val) {
+                case 0: state = "0 OPEN"; break;
+                case 1: state = "1 TEST PRE CLOSE"; break;
+                case 2: state = "2 TEST NEG OPEN"; break;
+                case 3: state = "3 TEST NEG CLOSE"; break;
+                case 4: state = "4 TEST POS OPEN"; break;
+                case 5: state = "5 TEST POS CLOSE"; break;
+                case 6: state = "6 PRECHARGE NEG"; break;
+                case 7: state = "7 PRECHARGING"; break;
+                case 8: state = "8 CLOSED"; break;
+                case 9: state = "9 CALIBRATING"; break;
+                case 10: state = "10 CAL CL NEG"; break;
+                case 11: state = "11 CAL PRE"; break;
+                case 12: state = "12 CAL CLOSED"; break;
+                case 13: state = "13 PRE FAIL"; break;
+                case 14: state = "14 TEST FAIL"; break;
+              }
+              static char buf[64];
+              snprintf(buf, sizeof(buf), "Reg 16 (Cont State): %s", state);
+              return buf;
+
+  - id: update_system_ui
+    parameters:
+      val: float
+    then:
+      - lambda: |-
+          static int last_val = -1;
+          if ((int)val != last_val) {
+            const char* state = "?? UNKNOWN";
+            switch ((int)val) {
+              case 0: state = "0 UNINITIALIZED"; break;
+              case 1: state = "1 INITIALIZING"; break;
+              case 2: state = "2 CALIBRATING"; break;
+              case 3: state = "3 INACTIVE"; break;
+              case 4: state = "4 OPERATING"; break;
+              case 5: state = "5 FAULT"; break;
+            }
+            id(bms_system_state_text).publish_state(state);
+            last_val = (int)val;
+          }
+      - lvgl.label.update:
+          id: debug_reg_15
+          text:
+            !lambda |-
+              const char* state = "?? UNKNOWN";
+              switch ((int)val) {
+                case 0: state = "0 UNINITIALIZED"; break;
+                case 1: state = "1 INITIALIZING"; break;
+                case 2: state = "2 CALIBRATING"; break; break;
+                case 3: state = "3 INACTIVE"; break;
+                case 4: state = "4 OPERATING"; break;
+                case 5: state = "5 FAULT"; break;
+              }
+              static char buf[64];
+              snprintf(buf, sizeof(buf), "Reg 15 (Sys State): %s", state);
+              return buf;
+
+  - id: update_system_req_ui
+    parameters:
+      val: float
+    then:
+      - lambda: |-
+          static int last_val = -1;
+          if ((int)val != last_val) {
+            const char* req = "?? NULL";
+            switch ((int)val) {
+              case 0: req = "0 NULL"; break;
+              case 1: req = "1 RUN"; break;
+              case 2: req = "2 STOP"; break;
+              case 3: req = "3 CALIBRATE"; break;
+            }
+            id(bms_system_req_text).publish_state(req);
+            last_val = (int)val;
+          }
+      - lvgl.label.update:
+          id: debug_reg_14
+          text:
+            !lambda |-
+              const char* req = "?? NULL";
+              switch ((int)val) {
+                case 0: req = "0 NULL"; break;
+                case 1: req = "1 RUN"; break;
+                case 2: req = "2 STOP"; break;
+                case 3: req = "3 CALIBRATE"; break;
+              }
+              static char buf[64];
+              snprintf(buf, sizeof(buf), "Reg 14 (Sys Req): %s", req);
+              return buf;
+
+  - id: update_events_ui
+    then:
+      - lvgl.label.update:
+          id: label_events
+          text:
+            !lambda |-
+              int level = (int)id(bms_highest_level).state;
+              int type = (int)id(bms_last_event).state;
+              
+              if (level == 0) {
+                id(bms_last_event_text).publish_state("NONE");
+                return ""; 
+              }
+              
+              const char* type_str = "?? UNKNOWN ERROR";
+              switch (type) {
+                case 0: type_str = "0 POS STUCK OPEN"; break;
+                case 1: type_str = "1 POS STUCK CLOSED"; break;
+                case 2: type_str = "2 NEG STUCK OPEN"; break;
+                case 3: type_str = "3 NEG STUCK CLOSED"; break;
+                case 4: type_str = "4 PRE STUCK OPEN"; break;
+                case 5: type_str = "5 PRE STUCK CLOSED"; break;
+                case 6: type_str = "6 PRECHARGE VOLT HIGH"; break;
+                case 7: type_str = "7 PRECHARGE CURR HIGH"; break;
+                case 8: type_str = "8 POS UNEXPECTED OPEN"; break;
+                case 9: type_str = "9 NEG UNEXPECTED OPEN"; break;
+                case 10: type_str = "10 CLOSING FAILED"; break;
+                case 11: type_str = "11 SUPPLY STALE"; break;
+                case 12: type_str = "12 BATTERY STALE"; break;
+                case 13: type_str = "13 TEMP STALE"; break;
+                case 14: type_str = "14 CURRENT STALE"; break;
+                case 15: type_str = "15 CELLS STALE"; break;
+                case 16: type_str = "16 3V3 LOW"; break;
+                case 17: type_str = "17 3V3 HIGH"; break;
+                case 18: type_str = "18 5V LOW"; break;
+                case 19: type_str = "19 5V HIGH"; break;
+                case 20: type_str = "20 12V LOW"; break;
+                case 21: type_str = "21 12V HIGH"; break;
+                case 22: type_str = "22 CTR LOW"; break;
+                case 23: type_str = "23 CTR VERY LOW"; break;
+                case 24: type_str = "24 CTR HIGH"; break;
+                case 25: type_str = "25 BATT VOLT HIGH"; break;
+                case 26: type_str = "26 BATT VOLT VERY HIGH"; break;
+                case 27: type_str = "27 BATT VOLT LOW"; break;
+                case 28: type_str = "28 BATT VOLT VERY LOW"; break;
+                case 29: type_str = "29 CELL VOLT HIGH"; break;
+                case 30: type_str = "30 CELL VOLT VERY HIGH"; break;
+                case 31: type_str = "31 CELL VOLT LOW"; break;
+                case 32: type_str = "32 CELL VOLT VERY LOW"; break;
+                case 33: type_str = "33 TEMP HIGH"; break;
+                case 34: type_str = "34 TEMP VERY HIGH"; break;
+                case 35: type_str = "35 TEMP LOW"; break;
+                case 36: type_str = "36 TEMP VERY LOW"; break;
+                case 37: type_str = "37 VOLT MISMATCH"; break;
+                case 38: type_str = "38 BMB READ ERROR"; break;
+                case 39: type_str = "39 BMB CRC MISMATCH"; break;
+                case 40: type_str = "40 INVERTER DETECTED"; break;
+                case 41: type_str = "41 ESTOP PRESSED"; break;
+                case 42: type_str = "42 BOOT NORMAL"; break;
+                case 43: type_str = "43 BOOT WATCHDOG"; break;
+                case 44: type_str = "44 LOOP OVERRUN"; break;
+                case 45: type_str = "45 RESTARTING"; break;
+              }
+              
+              const char* level_str = "??";
+              if (level == 1) level_str = "INFO";
+              else if (level == 2) level_str = "WARN";
+              else if (level == 3) level_str = "CRITICAL";
+              else if (level == 4) level_str = "FATAL";
+              
+              static char buf[64];
+              snprintf(buf, sizeof(buf), "[%s] %s", level_str, type_str);
+              id(bms_last_event_text).publish_state(buf);
+              return buf;
+      - lvgl.obj.update:
+          id: label_events
+          bg_color: !lambda |-
+            int level = (int)id(bms_highest_level).state;
+            if (level == 2) return lv_color_hex(0xFFA500); // Orange
+            if (level >= 3) return lv_color_hex(0xFF0000); // Red
+            return lv_color_hex(0x000000);
+
 sensor:
   - platform: uptime
     id: uptime_sec
@@ -178,526 +555,849 @@ sensor:
             text:
               format: "Uptime: %.0fs"
               args: [ x ]
+  - platform: template
+    name: "BMS Power"
+    id: bms_power
+    unit_of_measurement: "kW"
+    accuracy_decimals: 2
+    device_class: power
+    state_class: measurement
+    lambda: |-
+      return (id(bms_voltage).state * id(bms_current).state) / 1000.0f;
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: label_power
+            text:
+              format: "%.2f kW"
+              args: [ x ]
+
   - platform: hmi_bms
     hmi_bms_id: bms_hub
+    millis:
+      id: bms_millis
+      filters:
+        - throttle: 1s
+    serial:
+      id: bms_serial
+      filters:
+        - throttle: 1s
+    system_request:
+      id: bms_system_req
+      filters:
+        - lambda: |-
+            id(update_system_req_ui).execute(x);
+            return x;
+        - throttle: 1s
     soc:
       name: "BMS SOC"
       id: bms_soc
-      accuracy_decimals: 1
+      accuracy_decimals: 2
+      force_update: true
       filters:
-        - throttle: 10s
-      on_value:
-        then:
-          - script.execute:
-              id: update_soc_ui
-              val: !lambda "return x;"
-    current:
+        - lambda: |-
+            id(update_soc_ui).execute(x);
+            return x;
+        - throttle: 1s
+    current_mA:
       name: "BMS Current"
       id: bms_current
       accuracy_decimals: 3
-      on_value:
-        then:
-          - script.execute:
-              id: update_current_ui
-              val: !lambda "return x;"
-    battery_voltage:
+      force_update: true
+      filters:
+        - lambda: |-
+            id(update_current_ui).execute(x);
+            return x;
+        - throttle: 1s
+    charge_raw:
+      name: "BMS Charge"
+      id: bms_charge
+      accuracy_decimals: 2
+      force_update: true
+      filters:
+        - throttle: 1s
+    battery_voltage_mV:
       name: "BMS Battery Voltage"
       id: bms_voltage
       accuracy_decimals: 2
-      on_value:
-        then:
-          - script.execute:
-              id: update_voltage_ui
-              val: !lambda "return x;"
-    temperature_min:
+      force_update: true
+      filters:
+        - lambda: |-
+            id(update_voltage_ui).execute(x);
+            return x;
+        - throttle: 1s
+    output_voltage_mV:
+      name: "BMS Output Voltage"
+      id: bms_output_voltage
+      accuracy_decimals: 2
+      force_update: true
+      filters:
+        - lambda: |-
+            id(update_voltage_ui).execute(x);
+            return x;
+        - throttle: 1s
+    pos_contactor_voltage_mV:
+      name: "BMS Contactor Voltage Positive"
+      id: bms_pos_voltage
+      accuracy_decimals: 2
+      filters:
+        - throttle: 1s
+    neg_contactor_voltage_mV:
+      name: "BMS Contactor Voltage Negative"
+      id: bms_neg_voltage
+      accuracy_decimals: 2
+      filters:
+        - throttle: 1s
+    temperature_min_dC:
       name: "BMS Temperature Min"
       id: bms_temp_min
       accuracy_decimals: 1
+      force_update: true
       filters:
-        - throttle: 10s
-      on_value:
-        then:
-          - script.execute: update_temp_ui
-    temperature_max:
+        - throttle: 1s
+    temperature_max_dC:
       name: "BMS Temperature Max"
       id: bms_temp_max
       accuracy_decimals: 1
+      force_update: true
       filters:
-        - throttle: 10s
-      on_value:
-        then:
-          - script.execute: update_temp_ui
-    cell_voltage_min:
+        - throttle: 1s
+    temperature_delta:
+      name: "BMS Temperature Delta"
+      id: bms_temp_delta
+      accuracy_decimals: 1
+      force_update: true
+      filters:
+        - lambda: |-
+            id(update_temp_ui).execute();
+            return x;
+        - throttle: 1s
+    cell_voltage_min_mV:
       name: "BMS Cell Voltage Min"
       id: bms_cell_min
       accuracy_decimals: 3
+      force_update: true
       filters:
         - throttle: 1s
-      on_value:
-        then:
-          - script.execute: update_cells_ui
-    cell_voltage_max:
+    cell_voltage_max_mV:
       name: "BMS Cell Voltage Max"
       id: bms_cell_max
       accuracy_decimals: 3
+      force_update: true
       filters:
         - throttle: 1s
-      on_value:
-        then:
-          - script.execute: update_cells_ui
+    capacity_mC:
+      name: "BMS Capacity"
+      id: bms_capacity
+      filters:
+        - throttle: 1s
+    cell_voltage_delta:
+      name: "BMS Cell Voltage Delta"
+      id: bms_cell_delta
+      accuracy_decimals: 3
+      force_update: true
+      filters:
+        - throttle: 1s
+    system_sm:
+      name: "BMS System State"
+      id: bms_system_state
+      filters:
+        - lambda: |-
+            id(update_system_ui).execute(x);
+            return x;
+        - throttle: 1s
+    contactor_sm:
+      name: "BMS Contactor State"
+      id: bms_contactor_state
+      filters:
+        - lambda: |-
+            id(update_contactor_ui).execute(x);
+            return x;
+        - throttle: 1s
+    soc_voltage_based:
+      name: "BMS SOC (Voltage Based)"
+      id: bms_soc_voltage
+      filters:
+        - throttle: 1s
+    soc_basic_count:
+      name: "BMS SOC (Basic Count)"
+      id: bms_soc_basic
+      filters:
+        - throttle: 1s
+    soc_ekf:
+      name: "BMS SOC (EKF)"
+      id: bms_soc_ekf
+      filters:
+        - throttle: 1s
+    highest_event_level:
+      name: "BMS Highest Event Level"
+      id: bms_highest_level
+      filters:
+        - lambda: |-
+            id(update_events_ui).execute();
+            return x;
+        - throttle: 1s
+    event_history:
+      id: bms_event_history_full
+    last_event:
+      name: "BMS Last Event"
+      id: bms_last_event
+      filters:
+        - lambda: |-
+            id(update_events_ui).execute();
+            return x;
+        - throttle: 1s
+    supply_voltage_3V3_mV:
+      name: "BMS Supply 3V3"
+      id: bms_supply_3v3
+      filters:
+        - throttle: 1s
+    supply_voltage_5V_mV:
+      name: "BMS Supply 5V"
+      id: bms_supply_5v
+      filters:
+        - throttle: 1s
+    supply_voltage_12V_mV:
+      name: "BMS Supply 12V"
+      id: bms_supply_12v
+      filters:
+        - throttle: 1s
+    supply_voltage_contactor_mV:
+      name: "BMS Supply CTR"
+      id: bms_supply_ctr
+      filters:
+        - throttle: 1s
+    module_temperatures:
+      - name: "BMS Module Temp 1"
+        id: mod_temp_1
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 2"
+        id: mod_temp_2
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 3"
+        id: mod_temp_3
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 4"
+        id: mod_temp_4
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 5"
+        id: mod_temp_5
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 6"
+        id: mod_temp_6
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 7"
+        id: mod_temp_7
+        filters: [{throttle: 1s}]
+      - name: "BMS Module Temp 8"
+        id: mod_temp_8
+        filters: [{throttle: 1s}]
+    raw_temperatures:
+      - name: "BMS Temp Raw 001"
+        id: temp_raw_001
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 002"
+        id: temp_raw_002
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 003"
+        id: temp_raw_003
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 004"
+        id: temp_raw_004
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 005"
+        id: temp_raw_005
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 006"
+        id: temp_raw_006
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 007"
+        id: temp_raw_007
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 008"
+        id: temp_raw_008
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 009"
+        id: temp_raw_009
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 010"
+        id: temp_raw_010
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 011"
+        id: temp_raw_011
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 012"
+        id: temp_raw_012
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 013"
+        id: temp_raw_013
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 014"
+        id: temp_raw_014
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 015"
+        id: temp_raw_015
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 016"
+        id: temp_raw_016
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 017"
+        id: temp_raw_017
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 018"
+        id: temp_raw_018
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 019"
+        id: temp_raw_019
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 020"
+        id: temp_raw_020
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 021"
+        id: temp_raw_021
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 022"
+        id: temp_raw_022
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 023"
+        id: temp_raw_023
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 024"
+        id: temp_raw_024
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 025"
+        id: temp_raw_025
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 026"
+        id: temp_raw_026
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 027"
+        id: temp_raw_027
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 028"
+        id: temp_raw_028
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 029"
+        id: temp_raw_029
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 030"
+        id: temp_raw_030
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 031"
+        id: temp_raw_031
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 032"
+        id: temp_raw_032
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 033"
+        id: temp_raw_033
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 034"
+        id: temp_raw_034
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 035"
+        id: temp_raw_035
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 036"
+        id: temp_raw_036
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 037"
+        id: temp_raw_037
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 038"
+        id: temp_raw_038
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 039"
+        id: temp_raw_039
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 040"
+        id: temp_raw_040
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 041"
+        id: temp_raw_041
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 042"
+        id: temp_raw_042
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 043"
+        id: temp_raw_043
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 044"
+        id: temp_raw_044
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 045"
+        id: temp_raw_045
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 046"
+        id: temp_raw_046
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 047"
+        id: temp_raw_047
+        filters: [{throttle: 1s}]
+      - name: "BMS Temp Raw 048"
+        id: temp_raw_048
+        filters: [{throttle: 1s}]
     cell_voltages:
-      - name: "Cell 001 Voltage"
+      - name: "Cell Voltage 001"
         id: cell_001
         filters:
           - throttle: 1s
-      - name: "Cell 002 Voltage"
+      - name: "Cell Voltage 002"
         id: cell_002
         filters:
           - throttle: 1s
-      - name: "Cell 003 Voltage"
+      - name: "Cell Voltage 003"
         id: cell_003
         filters:
           - throttle: 1s
-      - name: "Cell 004 Voltage"
+      - name: "Cell Voltage 004"
         id: cell_004
         filters:
           - throttle: 1s
-      - name: "Cell 005 Voltage"
+      - name: "Cell Voltage 005"
         id: cell_005
         filters:
           - throttle: 1s
-      - name: "Cell 006 Voltage"
+      - name: "Cell Voltage 006"
         id: cell_006
         filters:
           - throttle: 1s
-      - name: "Cell 007 Voltage"
+      - name: "Cell Voltage 007"
         id: cell_007
         filters:
           - throttle: 1s
-      - name: "Cell 008 Voltage"
+      - name: "Cell Voltage 008"
         id: cell_008
         filters:
           - throttle: 1s
-      - name: "Cell 009 Voltage"
+      - name: "Cell Voltage 009"
         id: cell_009
         filters:
           - throttle: 1s
-      - name: "Cell 010 Voltage"
+      - name: "Cell Voltage 010"
         id: cell_010
         filters:
           - throttle: 1s
-      - name: "Cell 011 Voltage"
+      - name: "Cell Voltage 011"
         id: cell_011
         filters:
           - throttle: 1s
-      - name: "Cell 012 Voltage"
+      - name: "Cell Voltage 012"
         id: cell_012
         filters:
           - throttle: 1s
-      - name: "Cell 013 Voltage"
+      - name: "Cell Voltage 013"
         id: cell_013
         filters:
           - throttle: 1s
-      - name: "Cell 014 Voltage"
+      - name: "Cell Voltage 014"
         id: cell_014
         filters:
           - throttle: 1s
-      - name: "Cell 015 Voltage"
+      - name: "Cell Voltage 015"
         id: cell_015
         filters:
           - throttle: 1s
-      - name: "Cell 016 Voltage"
+      - name: "Cell Voltage 016"
         id: cell_016
         filters:
           - throttle: 1s
-      - name: "Cell 017 Voltage"
+      - name: "Cell Voltage 017"
         id: cell_017
         filters:
           - throttle: 1s
-      - name: "Cell 018 Voltage"
+      - name: "Cell Voltage 018"
         id: cell_018
         filters:
           - throttle: 1s
-      - name: "Cell 019 Voltage"
+      - name: "Cell Voltage 019"
         id: cell_019
         filters:
           - throttle: 1s
-      - name: "Cell 020 Voltage"
+      - name: "Cell Voltage 020"
         id: cell_020
         filters:
           - throttle: 1s
-      - name: "Cell 021 Voltage"
+      - name: "Cell Voltage 021"
         id: cell_021
         filters:
           - throttle: 1s
-      - name: "Cell 022 Voltage"
+      - name: "Cell Voltage 022"
         id: cell_022
         filters:
           - throttle: 1s
-      - name: "Cell 023 Voltage"
+      - name: "Cell Voltage 023"
         id: cell_023
         filters:
           - throttle: 1s
-      - name: "Cell 024 Voltage"
+      - name: "Cell Voltage 024"
         id: cell_024
         filters:
           - throttle: 1s
-      - name: "Cell 025 Voltage"
+      - name: "Cell Voltage 025"
         id: cell_025
         filters:
           - throttle: 1s
-      - name: "Cell 026 Voltage"
+      - name: "Cell Voltage 026"
         id: cell_026
         filters:
           - throttle: 1s
-      - name: "Cell 027 Voltage"
+      - name: "Cell Voltage 027"
         id: cell_027
         filters:
           - throttle: 1s
-      - name: "Cell 028 Voltage"
+      - name: "Cell Voltage 028"
         id: cell_028
         filters:
           - throttle: 1s
-      - name: "Cell 029 Voltage"
+      - name: "Cell Voltage 029"
         id: cell_029
         filters:
           - throttle: 1s
-      - name: "Cell 030 Voltage"
+      - name: "Cell Voltage 030"
         id: cell_030
         filters:
           - throttle: 1s
-      - name: "Cell 031 Voltage"
+      - name: "Cell Voltage 031"
         id: cell_031
         filters:
           - throttle: 1s
-      - name: "Cell 032 Voltage"
+      - name: "Cell Voltage 032"
         id: cell_032
         filters:
           - throttle: 1s
-      - name: "Cell 033 Voltage"
+      - name: "Cell Voltage 033"
         id: cell_033
         filters:
           - throttle: 1s
-      - name: "Cell 034 Voltage"
+      - name: "Cell Voltage 034"
         id: cell_034
         filters:
           - throttle: 1s
-      - name: "Cell 035 Voltage"
+      - name: "Cell Voltage 035"
         id: cell_035
         filters:
           - throttle: 1s
-      - name: "Cell 036 Voltage"
+      - name: "Cell Voltage 036"
         id: cell_036
         filters:
           - throttle: 1s
-      - name: "Cell 037 Voltage"
+      - name: "Cell Voltage 037"
         id: cell_037
         filters:
           - throttle: 1s
-      - name: "Cell 038 Voltage"
+      - name: "Cell Voltage 038"
         id: cell_038
         filters:
           - throttle: 1s
-      - name: "Cell 039 Voltage"
+      - name: "Cell Voltage 039"
         id: cell_039
         filters:
           - throttle: 1s
-      - name: "Cell 040 Voltage"
+      - name: "Cell Voltage 040"
         id: cell_040
         filters:
           - throttle: 1s
-      - name: "Cell 041 Voltage"
+      - name: "Cell Voltage 041"
         id: cell_041
         filters:
           - throttle: 1s
-      - name: "Cell 042 Voltage"
+      - name: "Cell Voltage 042"
         id: cell_042
         filters:
           - throttle: 1s
-      - name: "Cell 043 Voltage"
+      - name: "Cell Voltage 043"
         id: cell_043
         filters:
           - throttle: 1s
-      - name: "Cell 044 Voltage"
+      - name: "Cell Voltage 044"
         id: cell_044
         filters:
           - throttle: 1s
-      - name: "Cell 045 Voltage"
+      - name: "Cell Voltage 045"
         id: cell_045
         filters:
           - throttle: 1s
-      - name: "Cell 046 Voltage"
+      - name: "Cell Voltage 046"
         id: cell_046
         filters:
           - throttle: 1s
-      - name: "Cell 047 Voltage"
+      - name: "Cell Voltage 047"
         id: cell_047
         filters:
           - throttle: 1s
-      - name: "Cell 048 Voltage"
+      - name: "Cell Voltage 048"
         id: cell_048
         filters:
           - throttle: 1s
-      - name: "Cell 049 Voltage"
+      - name: "Cell Voltage 049"
         id: cell_049
         filters:
           - throttle: 1s
-      - name: "Cell 050 Voltage"
+      - name: "Cell Voltage 050"
         id: cell_050
         filters:
           - throttle: 1s
-      - name: "Cell 051 Voltage"
+      - name: "Cell Voltage 051"
         id: cell_051
         filters:
           - throttle: 1s
-      - name: "Cell 052 Voltage"
+      - name: "Cell Voltage 052"
         id: cell_052
         filters:
           - throttle: 1s
-      - name: "Cell 053 Voltage"
+      - name: "Cell Voltage 053"
         id: cell_053
         filters:
           - throttle: 1s
-      - name: "Cell 054 Voltage"
+      - name: "Cell Voltage 054"
         id: cell_054
         filters:
           - throttle: 1s
-      - name: "Cell 055 Voltage"
+      - name: "Cell Voltage 055"
         id: cell_055
         filters:
           - throttle: 1s
-      - name: "Cell 056 Voltage"
+      - name: "Cell Voltage 056"
         id: cell_056
         filters:
           - throttle: 1s
-      - name: "Cell 057 Voltage"
+      - name: "Cell Voltage 057"
         id: cell_057
         filters:
           - throttle: 1s
-      - name: "Cell 058 Voltage"
+      - name: "Cell Voltage 058"
         id: cell_058
         filters:
           - throttle: 1s
-      - name: "Cell 059 Voltage"
+      - name: "Cell Voltage 059"
         id: cell_059
         filters:
           - throttle: 1s
-      - name: "Cell 060 Voltage"
+      - name: "Cell Voltage 060"
         id: cell_060
         filters:
           - throttle: 1s
-      - name: "Cell 061 Voltage"
+      - name: "Cell Voltage 061"
         id: cell_061
         filters:
           - throttle: 1s
-      - name: "Cell 062 Voltage"
+      - name: "Cell Voltage 062"
         id: cell_062
         filters:
           - throttle: 1s
-      - name: "Cell 063 Voltage"
+      - name: "Cell Voltage 063"
         id: cell_063
         filters:
           - throttle: 1s
-      - name: "Cell 064 Voltage"
+      - name: "Cell Voltage 064"
         id: cell_064
         filters:
           - throttle: 1s
-      - name: "Cell 065 Voltage"
+      - name: "Cell Voltage 065"
         id: cell_065
         filters:
           - throttle: 1s
-      - name: "Cell 066 Voltage"
+      - name: "Cell Voltage 066"
         id: cell_066
         filters:
           - throttle: 1s
-      - name: "Cell 067 Voltage"
+      - name: "Cell Voltage 067"
         id: cell_067
         filters:
           - throttle: 1s
-      - name: "Cell 068 Voltage"
+      - name: "Cell Voltage 068"
         id: cell_068
         filters:
           - throttle: 1s
-      - name: "Cell 069 Voltage"
+      - name: "Cell Voltage 069"
         id: cell_069
         filters:
           - throttle: 1s
-      - name: "Cell 070 Voltage"
+      - name: "Cell Voltage 070"
         id: cell_070
         filters:
           - throttle: 1s
-      - name: "Cell 071 Voltage"
+      - name: "Cell Voltage 071"
         id: cell_071
         filters:
           - throttle: 1s
-      - name: "Cell 072 Voltage"
+      - name: "Cell Voltage 072"
         id: cell_072
         filters:
           - throttle: 1s
-      - name: "Cell 073 Voltage"
+      - name: "Cell Voltage 073"
         id: cell_073
         filters:
           - throttle: 1s
-      - name: "Cell 074 Voltage"
+      - name: "Cell Voltage 074"
         id: cell_074
         filters:
           - throttle: 1s
-      - name: "Cell 075 Voltage"
+      - name: "Cell Voltage 075"
         id: cell_075
         filters:
           - throttle: 1s
-      - name: "Cell 076 Voltage"
+      - name: "Cell Voltage 076"
         id: cell_076
         filters:
           - throttle: 1s
-      - name: "Cell 077 Voltage"
+      - name: "Cell Voltage 077"
         id: cell_077
         filters:
           - throttle: 1s
-      - name: "Cell 078 Voltage"
+      - name: "Cell Voltage 078"
         id: cell_078
         filters:
           - throttle: 1s
-      - name: "Cell 079 Voltage"
+      - name: "Cell Voltage 079"
         id: cell_079
         filters:
           - throttle: 1s
-      - name: "Cell 080 Voltage"
+      - name: "Cell Voltage 080"
         id: cell_080
         filters:
           - throttle: 1s
-      - name: "Cell 081 Voltage"
+      - name: "Cell Voltage 081"
         id: cell_081
         filters:
           - throttle: 1s
-      - name: "Cell 082 Voltage"
+      - name: "Cell Voltage 082"
         id: cell_082
         filters:
           - throttle: 1s
-      - name: "Cell 083 Voltage"
+      - name: "Cell Voltage 083"
         id: cell_083
         filters:
           - throttle: 1s
-      - name: "Cell 084 Voltage"
+      - name: "Cell Voltage 084"
         id: cell_084
         filters:
           - throttle: 1s
-      - name: "Cell 085 Voltage"
+      - name: "Cell Voltage 085"
         id: cell_085
         filters:
           - throttle: 1s
-      - name: "Cell 086 Voltage"
+      - name: "Cell Voltage 086"
         id: cell_086
         filters:
           - throttle: 1s
-      - name: "Cell 087 Voltage"
+      - name: "Cell Voltage 087"
         id: cell_087
         filters:
           - throttle: 1s
-      - name: "Cell 088 Voltage"
+      - name: "Cell Voltage 088"
         id: cell_088
         filters:
           - throttle: 1s
-      - name: "Cell 089 Voltage"
+      - name: "Cell Voltage 089"
         id: cell_089
         filters:
           - throttle: 1s
-      - name: "Cell 090 Voltage"
+      - name: "Cell Voltage 090"
         id: cell_090
         filters:
           - throttle: 1s
-      - name: "Cell 091 Voltage"
+      - name: "Cell Voltage 091"
         id: cell_091
         filters:
           - throttle: 1s
-      - name: "Cell 092 Voltage"
+      - name: "Cell Voltage 092"
         id: cell_092
         filters:
           - throttle: 1s
-      - name: "Cell 093 Voltage"
+      - name: "Cell Voltage 093"
         id: cell_093
         filters:
           - throttle: 1s
-      - name: "Cell 094 Voltage"
+      - name: "Cell Voltage 094"
         id: cell_094
         filters:
           - throttle: 1s
-      - name: "Cell 095 Voltage"
+      - name: "Cell Voltage 095"
         id: cell_095
         filters:
           - throttle: 1s
-      - name: "Cell 096 Voltage"
+      - name: "Cell Voltage 096"
         id: cell_096
         filters:
           - throttle: 1s
-      - name: "Cell 097 Voltage"
+      - name: "Cell Voltage 097"
         id: cell_097
         filters:
           - throttle: 1s
-      - name: "Cell 098 Voltage"
+      - name: "Cell Voltage 098"
         id: cell_098
         filters:
           - throttle: 1s
-      - name: "Cell 099 Voltage"
+      - name: "Cell Voltage 099"
         id: cell_099
         filters:
           - throttle: 1s
-      - name: "Cell 100 Voltage"
+      - name: "Cell Voltage 100"
         id: cell_100
         filters:
           - throttle: 1s
-      - name: "Cell 101 Voltage"
+      - name: "Cell Voltage 101"
         id: cell_101
         filters:
           - throttle: 1s
-      - name: "Cell 102 Voltage"
+      - name: "Cell Voltage 102"
         id: cell_102
         filters:
           - throttle: 1s
-      - name: "Cell 103 Voltage"
+      - name: "Cell Voltage 103"
         id: cell_103
         filters:
           - throttle: 1s
-      - name: "Cell 104 Voltage"
+      - name: "Cell Voltage 104"
         id: cell_104
         filters:
           - throttle: 1s
-      - name: "Cell 105 Voltage"
+      - name: "Cell Voltage 105"
         id: cell_105
         filters:
           - throttle: 1s
-      - name: "Cell 106 Voltage"
+      - name: "Cell Voltage 106"
         id: cell_106
         filters:
           - throttle: 1s
-      - name: "Cell 107 Voltage"
+      - name: "Cell Voltage 107"
         id: cell_107
         filters:
           - throttle: 1s
-      - name: "Cell 108 Voltage"
+      - name: "Cell Voltage 108"
         id: cell_108
         filters:
           - throttle: 1s
 
-logger:
-  baud_rate: 115200
-  hardware_uart: UART0
-  level: DEBUG
-  logs:
-    sensor: INFO
-
-uart:
-  - id: uart_bus
-    tx_pin: GPIO24   #USB Negative - yes we are using the usb pins for serial UART
-    rx_pin: GPIO25   #USB Positive
-    baud_rate: 460800
-
-i2c:
-  - id: bus_a
-    sda: GPIO7
-    scl: GPIO8
-    scan: true
-    frequency: 400kHz
+text_sensor:
+  - platform: template
+    name: "BMS Contactor State Text"
+    id: bms_contactor_state_text
+    icon: mdi:form-select
+  - platform: template
+    name: "BMS System State Text"
+    id: bms_system_state_text
+    icon: mdi:form-select
+  - platform: template
+    name: "BMS System Request Text"
+    id: bms_system_req_text
+    icon: mdi:form-select
+  - platform: template
+    name: "BMS Last Event Text"
+    id: bms_last_event_text
+    icon: mdi:alert-circle-outline
+  - platform: template
+    name: "BMS Event History"
+    id: bms_event_history_text
+    lambda: |-
+      return id(bms_event_history_full).state;
+    on_value:
+      then:
+        - lvgl.label.update:
+            id: label_debug_event_log
+            text: !lambda "return x.c_str();"
 
 ### Display
 display:
@@ -762,7 +1462,28 @@ lvgl:
     - id: main_page
       on_swipe_left:
         - lvgl.page.show: details_page
+      on_swipe_right:
+        - lvgl.page.show: debug_page
       widgets:
+        - label:
+            id: label_events
+            text: ""
+            align: TOP_MID
+            y: 0
+            width: 100%
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+            bg_opa: 100%
+            bg_color: 0x000000
+
+        - label:
+            id: label_contactor
+            text: "Contactor: 0 OPEN / OFF"
+            align: TOP_MID
+            y: 400
+            text_font: font_roboto_40
+            text_color: 0xFFFFFF
+
         # SOC Arc Indicator
         - arc:
             id: soc_arc
@@ -791,21 +1512,30 @@ lvgl:
         # Main Data (Right Side)
         - label:
             id: label_voltage
-            text: " "
+            text: "--V"
             align: TOP_RIGHT
-            x: -60
-            y: 70
+            x: -120
+            y: 60
             text_font: font_roboto_80
             text_color: 0x00BFFF # DeepSkyBlue
 
         - label:
             id: label_current
-            text: " "
+            text: "--A"
             align: TOP_RIGHT
-            x: -60
-            y: 190
+            x: -120
+            y: 160
             text_font: font_roboto_80
             text_color: 0xFFA500 # Orange
+
+        - label:
+            id: label_power
+            text: "--kW"
+            align: TOP_RIGHT
+            x: -60
+            y: 260
+            text_font: font_roboto_80
+            text_color: 0xADFF2F # GreenYellow
 
         # Divider
         - obj:
@@ -817,9 +1547,9 @@ lvgl:
 
         # Statistics Grid (Bottom)
         - label:
-            text: "TEMPERATURE"
+            text: "TEMP MIN/MAX (DELTA)"
             align: BOTTOM_LEFT
-            x: 60
+            x: 40
             y: -90
             text_font: font_roboto_20
             text_color: 0x888888
@@ -827,15 +1557,15 @@ lvgl:
             id: label_temp
             text: " "
             align: BOTTOM_LEFT
-            x: 60
+            x: 40
             y: -40
             text_font: font_roboto_40
             text_color: 0xFFFFFF
 
         - label:
-            text: "CELL VOLTAGES"
+            text: "CELL MIN/MAX (DELTA)"
             align: BOTTOM_RIGHT
-            x: -60
+            x: -40
             y: -90
             text_font: font_roboto_20
             text_color: 0x888888
@@ -843,7 +1573,7 @@ lvgl:
             id: label_cells
             text: " "
             align: BOTTOM_RIGHT
-            x: -60
+            x: -40
             y: -40
             text_font: font_roboto_40
             text_color: 0xFFFFFF
@@ -882,6 +1612,337 @@ lvgl:
 
         - label:
             text: "← Swipe right to return"
+            align: BOTTOM_MID
+            y: -20
+            text_font: font_roboto_20
+            text_color: 0x666666
+
+    - id: debug_page
+      on_swipe_left:
+        - lvgl.page.show: main_page
+      on_swipe_right:
+        - lvgl.page.show: debug_commands_page
+      widgets:
+        - label:
+            text: "HMI REGISTER DEBUG DATA"
+            align: TOP_MID
+            y: 20
+            text_font: font_roboto_40
+            text_color: 0xAAAAAA
+
+        - label:
+            id: debug_reg_1
+            text: "Reg 1 (Serial): --"
+            align: TOP_LEFT
+            x: 40
+            y: 80
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: label_debug_millis
+            text: "Reg 2 (Millis): -- ms"
+            align: TOP_LEFT
+            x: 40
+            y: 110
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_3
+            text: "Reg 3 (SOC): -- %"
+            align: TOP_LEFT
+            x: 40
+            y: 140
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_4
+            text: "Reg 4 (Current): -- A"
+            align: TOP_LEFT
+            x: 40
+            y: 170
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_5
+            text: "Reg 5 (Charge): -- Ah"
+            align: TOP_LEFT
+            x: 40
+            y: 200
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_6
+            text: "Reg 6 (Battery V): -- V"
+            align: TOP_LEFT
+            x: 40
+            y: 230
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_7
+            text: "Reg 7 (Output V): -- V"
+            align: TOP_LEFT
+            x: 40
+            y: 260
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_8
+            text: "Reg 8 (Pos Contactor): -- V"
+            align: TOP_LEFT
+            x: 40
+            y: 290
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_9
+            text: "Reg 9 (Neg Contactor): -- V"
+            align: TOP_LEFT
+            x: 40
+            y: 320
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_10
+            text: "Reg 10 (Temp Min): -- °C"
+            align: TOP_LEFT
+            x: 40
+            y: 350
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_11
+            text: "Reg 11 (Temp Max): -- °C"
+            align: TOP_LEFT
+            x: 40
+            y: 380
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_12
+            text: "Reg 12 (Cell V Min): -- V"
+            align: TOP_LEFT
+            x: 40
+            y: 410
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_13
+            text: "Reg 13 (Cell V Max): -- V"
+            align: TOP_LEFT
+            x: 40
+            y: 440
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_14
+            text: "Reg 14 (Sys Req): --"
+            align: TOP_LEFT
+            x: 450
+            y: 80
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_15
+            text: "Reg 15 (Sys State): --"
+            align: TOP_LEFT
+            x: 450
+            y: 110
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_16
+            text: "Reg 16 (Cont State): --"
+            align: TOP_LEFT
+            x: 450
+            y: 140
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_17
+            text: "Reg 17 (SOC Volt): -- %"
+            align: TOP_LEFT
+            x: 450
+            y: 170
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_18
+            text: "Reg 18 (SOC Basic): -- %"
+            align: TOP_LEFT
+            x: 450
+            y: 200
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_19
+            text: "Reg 19 (SOC EKF): -- %"
+            align: TOP_LEFT
+            x: 450
+            y: 230
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_20
+            text: "Reg 20 (Capacity): -- Ah"
+            align: TOP_LEFT
+            x: 450
+            y: 260
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_21
+            text: "Reg 21 (3V3): -- V"
+            align: TOP_LEFT
+            x: 450
+            y: 290
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_22
+            text: "Reg 22 (5V): -- V"
+            align: TOP_LEFT
+            x: 450
+            y: 320
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_23
+            text: "Reg 23 (12V): -- V"
+            align: TOP_LEFT
+            x: 450
+            y: 350
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            id: debug_reg_24
+            text: "Reg 24 (CTR): -- V"
+            align: TOP_LEFT
+            x: 450
+            y: 380
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+
+        - label:
+            text: "← Swipe right for Commands | Swipe left for Main →"
+            align: BOTTOM_MID
+            y: -20
+            text_font: font_roboto_20
+            text_color: 0x666666
+
+    - id: debug_commands_page
+      on_swipe_left:
+        - lvgl.page.show: debug_page
+      on_swipe_right:
+        - lvgl.page.show: debug_page_3
+      widgets:
+        - label:
+            text: "BMS SYSTEM COMMANDS"
+            align: TOP_MID
+            y: 20
+            text_font: font_roboto_40
+            text_color: 0xAAAAAA
+
+        - button:
+            id: btn_stop
+            x: 0
+            y: 100
+            width: 300
+            height: 80
+            align: TOP_MID
+            widgets:
+              - label:
+                  text: "STOP (Transition to Inactive)"
+                  align: CENTER
+            on_click:
+              then:
+                - lambda: |-
+                    id(bms_hub).send_system_request(2);
+
+        - button:
+            id: btn_run
+            x: 0
+            y: 200
+            width: 300
+            height: 80
+            align: TOP_MID
+            widgets:
+              - label:
+                  text: "RUN (Transition to Operating)"
+                  align: CENTER
+            on_click:
+              then:
+                - lambda: |-
+                    id(bms_hub).send_system_request(1);
+
+        - button:
+            id: btn_calibrate
+            x: 0
+            y: 300
+            width: 300
+            height: 80
+            align: TOP_MID
+            widgets:
+              - label:
+                  text: "CALIBRATE"
+                  align: CENTER
+            on_click:
+              then:
+                - lambda: |-
+                    id(bms_hub).send_system_request(3);
+
+        - label:
+            text: "← Swipe left for Data | Swipe right for Log →"
+            align: BOTTOM_MID
+            y: -20
+            text_font: font_roboto_20
+            text_color: 0x666666
+
+    - id: debug_page_3
+      on_swipe_left:
+        - lvgl.page.show: debug_commands_page
+      widgets:
+        - label:
+            text: "DETAILED EVENT LOG"
+            align: TOP_MID
+            y: 20
+            text_font: font_roboto_40
+            text_color: 0xAAAAAA
+        - label:
+            id: label_debug_event_log
+            text: "No events logged."
+            align: TOP_LEFT
+            x: 40
+            y: 80
+            width: 90%
+            text_font: font_roboto_20
+            text_color: 0xFFFFFF
+            long_mode: WRAP
+        - label:
+            text: "← Swipe left to return to Commands"
             align: BOTTOM_MID
             y: -20
             text_font: font_roboto_20
